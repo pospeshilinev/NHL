@@ -21,6 +21,9 @@ export async function syncFromNhl() {
 
   for (const s of seriesList) {
     const games = (s.topSeedWins ?? 0) + (s.bottomSeedWins ?? 0);
+    const slot = typeof s.seriesLetter === 'string' && s.seriesLetter.length
+      ? s.seriesLetter.toUpperCase().charCodeAt(0) - 64
+      : 0;
     await pool.query(
       `insert into series (
          season_id, round, conference, slot, series_letter,
@@ -38,7 +41,7 @@ export async function syncFromNhl() {
         season.id,
         s.playoffRound,
         s.conferenceAbbrev ?? null,
-        s.bracketLogic ?? s.seriesLetter,
+        slot,
         s.seriesLetter,
         s.topSeedTeam?.abbrev ?? null,
         s.bottomSeedTeam?.abbrev ?? null,
