@@ -1,5 +1,19 @@
 import { pool } from './db';
 
+// Fixed NHL bracket (no reseeding): letter → {round, conference}.
+// A..D East R1, E..H West R1, I..J East R2, K..L West R2, M East CF, N West CF, O SCF.
+const BRACKET: Record<string, { round: number; conference: 'E' | 'W' | null }> = {
+  A: { round: 1, conference: 'E' }, B: { round: 1, conference: 'E' },
+  C: { round: 1, conference: 'E' }, D: { round: 1, conference: 'E' },
+  E: { round: 1, conference: 'W' }, F: { round: 1, conference: 'W' },
+  G: { round: 1, conference: 'W' }, H: { round: 1, conference: 'W' },
+  I: { round: 2, conference: 'E' }, J: { round: 2, conference: 'E' },
+  K: { round: 2, conference: 'W' }, L: { round: 2, conference: 'W' },
+  M: { round: 3, conference: 'E' },
+  N: { round: 3, conference: 'W' },
+  O: { round: 4, conference: null },
+};
+
 // Тянет официальную сетку плей-офф из публичного NHL API и обновляет:
 // - series (по series_letter)
 // - bonus_results (полуфиналисты конференций, финалисты Кубка, чемпион)
@@ -20,10 +34,11 @@ export async function syncFromNhl() {
   const seriesList: any[] = bracket.series ?? [];
 
   for (const s of seriesList) {
+    const letter = typeof s.seriesLetter === 'string' ? s.seriesLetter.toUpperCase() : '';
+    const meta = BRACKET[letter];
+    if (!meta) continue;
     const games = (s.topSeedWins ?? 0) + (s.bottomSeedWins ?? 0);
-    const slot = typeof s.seriesLetter === 'string' && s.seriesLetter.length
-      ? s.seriesLetter.toUpperCase().charCodeAt(0) - 64
-      : 0;
+    const slot = letter.charCodeAt(0) - 64;
     await pool.query(
       `insert into series (
          season_id, round, conference, slot, series_letter,
@@ -39,10 +54,10 @@ export async function syncFromNhl() {
          actual_games = excluded.actual_games`,
       [
         season.id,
-        s.playoffRound,
-        s.conferenceAbbrev ?? null,
+        meta.round,
+        meta.conference,
         slot,
-        s.seriesLetter,
+        letter,
         s.topSeedTeam?.abbrev ?? null,
         s.bottomSeedTeam?.abbrev ?? null,
         s.winningTeamAbbrev ?? null,
@@ -51,17 +66,20 @@ export async function syncFromNhl() {
     );
   }
 
-  // bonus_results
+  // bonus_results — роль серии определяем по букве, а не по полю API.
   const cf: { E: string[]; W: string[] } = { E: [], W: [] };
   const cupFinalists: string[] = [];
   let cupWinner: string | null = null;
   for (const s of seriesList) {
     if (!s.winningTeamAbbrev) continue;
-    if (s.playoffRound === 2 && s.conferenceAbbrev) {
-      cf[s.conferenceAbbrev as 'E' | 'W'].push(s.winningTeamAbbrev);
+    const letter = typeof s.seriesLetter === 'string' ? s.seriesLetter.toUpperCase() : '';
+    const meta = BRACKET[letter];
+    if (!meta) continue;
+    if (meta.round === 2 && meta.conference) {
+      cf[meta.conference].push(s.winningTeamAbbrev);
     }
-    if (s.playoffRound === 3) cupFinalists.push(s.winningTeamAbbrev);
-    if (s.playoffRound === 4) cupWinner = s.winningTeamAbbrev;
+    if (meta.round === 3) cupFinalists.push(s.winningTeamAbbrev);
+    if (meta.round === 4) cupWinner = s.winningTeamAbbrev;
   }
 
   await pool.query(
