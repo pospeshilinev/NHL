@@ -88,6 +88,49 @@ docker compose up -d --build
 docker compose exec postgres pg_dump -U nhl nhl | gzip > backup-$(date +%F).sql.gz
 ```
 
+## Частые проблемы
+
+### `WARN The "xxx" variable is not set. Defaulting to a blank string.`
+Ваш `.env` содержит символ `$` в значении (обычно в пароле) — docker compose интерпретирует `$VAR` как ссылку на переменную. Два варианта:
+
+- **Экранировать** удвоением: `PASSWORD=my$$secret`
+- **Сгенерировать пароль без `$`**: `openssl rand -hex 24`
+
+Строка `DATABASE_URL` должна содержать тот же пароль, что и `POSTGRES_PASSWORD`.
+
+### `AggregateError [ECONNREFUSED] ::1:5432` на этапе `npm run build`
+Next.js во время сборки пытается пререндерить страницы и натыкается на запросы к БД, которой при билде ещё нет. Должно быть исправлено флагом `export const dynamic = 'force-dynamic'` в `src/app/layout.tsx`. Если всё-таки ловите — убедитесь, что сделан `git pull` с последним коммитом.
+
+### `failed to compute cache key: "/app/public": not found`
+В репо должна быть папка `public/` (хотя бы пустая с `.gitkeep`). Если удалили случайно:
+```bash
+mkdir -p public && touch public/.gitkeep
+```
+
+### Magic link не приходит
+```bash
+docker compose logs app | grep -i -E "nodemailer|smtp|email"
+```
+Типовые причины:
+- неверный `EMAIL_SERVER_PORT` / `EMAIL_SERVER_SECURE` (для Exchange обычно 587 + `false`)
+- Exchange не разрешает authenticated SMTP с IP сервера (receive connector)
+- `EMAIL_FROM` с доменом, который Exchange не обслуживает → relay denied
+- самоподписанный сертификат на Exchange — добавьте в `src/auth.ts` в объект `server`: `tls: { rejectUnauthorized: false }`
+
+### Ошибка `AuthJS: missing URL` или редирект на неправильный хост
+`AUTH_URL` в `.env` должен **буква-в-букву** совпадать с тем, что пользователи вбивают в браузере (схема + хост + порт):
+```
+AUTH_URL=http://10.185.22.36:3000
+```
+
+### Порт 3000 уже занят на хосте
+Поменяйте левую часть маппинга в `docker-compose.yml`:
+```yaml
+ports:
+  - "3100:3000"
+```
+И синхронно обновите `AUTH_URL=http://<ip>:3100`.
+
 ## Структура
 ```
 src/app/            — страницы (home, signin, picks, leaderboard, admin)
