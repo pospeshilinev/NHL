@@ -1,31 +1,29 @@
 # NHL Playoff Picks
 
-Небольшой сайт прогнозов плей-офф NHL. RU/EN, magic-link авторизация, автообновление результатов из NHL API.
+Небольшой сайт прогнозов плей-офф NHL. RU, авторизация по логин/паролю (аккаунты создаёт админ), автообновление результатов из NHL API.
 
 ## Стек
 - **Next.js 14** (App Router, standalone build)
 - **PostgreSQL 16**
-- **Auth.js v5** + Nodemailer (magic link через ваш SMTP)
-- **Docker Compose** — postgres + app + cron, app публикует порт 3000 на хосте
-- **next-intl** — RU/EN
+- **Auth.js v5** + Credentials + bcryptjs (username/password, JWT-сессии)
+- **Docker Compose** — postgres + app + cron
 
 ## Правила подсчёта
 - Серия: точный счёт **3**, только победитель **1**, мимо **0**
-- Финалисты конференций (4 команды, по 2 на конференцию): **5** за каждого = до 20
+- Финалисты конференций (4 команды): **5** за каждого = до 20
 - Участники финала Кубка Стэнли (2 команды): **7** за каждого = до 14
 - Чемпион: **10**
 - **Максимум бонусов: 44**
 
-Все 15 серий + 7 бонусных пиков заполняются одной формой **до старта 1-го раунда**. После дедлайна форма закрывается, чужие пики становятся видны.
+Все 15 серий + 7 бонусных пиков заполняются одной формой **до старта 1-го раунда**. После дедлайна форма закрывается.
 
-## Деплой на свой VPS
+## Деплой
 
 ### Требования
-- Ubuntu 22.04/24.04 (или Debian)
-- 2+ ГБ RAM, 1+ vCPU, 20+ ГБ диска
-- Свободный TCP-порт 3000 на хосте (или поменяйте маппинг в `docker-compose.yml`)
-- IP сервера в локальной сети либо DNS-имя
-- Доступ к SMTP-серверу Exchange (хост, порт, учётка, пароль)
+- Ubuntu 22.04/24.04 или Debian
+- 2+ ГБ RAM, 1+ vCPU
+- Свободный TCP-порт 3000 (или поменять маппинг в `docker-compose.yml`)
+- Docker с плагином `compose`
 
 ### Шаги
 
@@ -34,7 +32,7 @@
    curl -fsSL https://get.docker.com | sh
    ```
 
-2. **Склонировать репозиторий:**
+2. **Склонировать:**
    ```bash
    git clone https://github.com/pospeshilinev/NHL.git
    cd NHL
@@ -45,42 +43,41 @@
    cp .env.example .env
    nano .env
    ```
-   Сгенерировать `AUTH_SECRET`:
-   ```bash
-   openssl rand -base64 32
-   ```
+   Заполнить:
+   - `POSTGRES_PASSWORD` + тот же пароль в `DATABASE_URL` (избегайте символа `$`)
+   - `AUTH_SECRET` — сгенерировать: `openssl rand -base64 32`
+   - `AUTH_URL` — точно тот URL, по которому открывают сайт, например `http://10.185.22.36:3000`
+   - `BOOTSTRAP_ADMIN_USERNAME` + `BOOTSTRAP_ADMIN_PASSWORD` — учётка первого админа, создастся автоматически при первом запуске
+   - `CRON_SECRET` — `openssl rand -hex 32`
+   - `NHL_SEASON` — например `20252026`
 
-4. **В `.env` указать `AUTH_URL`** — ровно тот URL, по которому будут открывать сайт:
-   ```
-   AUTH_URL=http://10.185.22.10:3000
-   AUTH_TRUST_HOST=true
-   ```
-   (или DNS-имя, например `http://nhl.local:3000`).
-
-5. **Запустить контейнеры:**
+4. **Запустить:**
    ```bash
    docker compose up -d --build
+   docker compose logs app | grep bootstrap
    ```
-   Приложение доступно на `http://<ip-сервера>:3000` со всей локальной сети.
-   Если есть firewall:
-   ```bash
-   sudo ufw allow from 10.185.22.0/24 to any port 3000
-   ```
+   В логе должно быть `[bootstrap] создан admin "<имя>"`.
 
-6. **Открыть сайт** в браузере → `/signin` → ввести email → перейти по magic link из письма.
+5. **Войти** на `http://<ip>:3000/signin` с учёткой из env.
 
-7. **Назначить себя админом:**
-   ```bash
-   docker compose exec postgres psql -U nhl -d nhl \
-     -c "update users set role='admin' where email='you@example.com';"
-   ```
+6. **Зайти в `/admin`:**
+   - Задать год сезона и дедлайн → Сохранить
+   - Нажать **Синк NHL API** — подтянется сетка
+   - В разделе «Пользователи» — создать аккаунты остальным участникам
 
-8. **Зайти в `/admin`**, ввести год и дедлайн, нажать **Синк NHL API**.
+7. После создания пользователей переменные `BOOTSTRAP_ADMIN_*` можно оставить (идемпотентно) или убрать из `.env`.
 
 ### Обновление
 ```bash
-git pull
-docker compose up -d --build
+git pull && docker compose up -d --build
+```
+
+### Смена пароля админа
+Через UI `/admin` → «Пользователи» → «сменить пароль». Или:
+```bash
+docker compose exec postgres psql -U nhl -d nhl \
+  -c "delete from users where username='admin';"
+# потом BOOTSTRAP_ADMIN_PASSWORD в .env → docker compose up -d
 ```
 
 ### Бэкап БД
@@ -88,55 +85,45 @@ docker compose up -d --build
 docker compose exec postgres pg_dump -U nhl nhl | gzip > backup-$(date +%F).sql.gz
 ```
 
+### ⚠️ Миграция со старой схемы (email/magic link → username/password)
+Если БД уже была создана предыдущей версией, структура таблицы `users` несовместима. Сбросьте данные:
+```bash
+docker compose down
+docker volume rm nhl_pgdata
+docker compose up -d --build
+```
+
 ## Частые проблемы
 
-### `WARN The "xxx" variable is not set. Defaulting to a blank string.`
-Ваш `.env` содержит символ `$` в значении (обычно в пароле) — docker compose интерпретирует `$VAR` как ссылку на переменную. Два варианта:
+### `WARN The "xxx" variable is not set`
+В `.env` значение содержит `$`. Экранируйте `$$` или сгенерируйте пароль без `$`: `openssl rand -hex 24`.
 
-- **Экранировать** удвоением: `PASSWORD=my$$secret`
-- **Сгенерировать пароль без `$`**: `openssl rand -hex 24`
+### `ECONNREFUSED ::1:5432` при билде
+Должно быть исправлено `force-dynamic` в `layout.tsx`. Проверьте, что `git pull` подтянул последнее.
 
-Строка `DATABASE_URL` должна содержать тот же пароль, что и `POSTGRES_PASSWORD`.
+### `"/app/public": not found`
+Создайте `mkdir -p public && touch public/.gitkeep`.
 
-### `AggregateError [ECONNREFUSED] ::1:5432` на этапе `npm run build`
-Next.js во время сборки пытается пререндерить страницы и натыкается на запросы к БД, которой при билде ещё нет. Должно быть исправлено флагом `export const dynamic = 'force-dynamic'` в `src/app/layout.tsx`. Если всё-таки ловите — убедитесь, что сделан `git pull` с последним коммитом.
+### Не удаётся войти
+- Проверьте `docker compose logs app` — там видно попытки входа и ошибки.
+- Убедитесь, что `AUTH_URL` в `.env` совпадает буква-в-букву с URL в браузере (схема + хост + порт).
+- Если забыли пароль — смотри «Смена пароля админа» выше.
 
-### `failed to compute cache key: "/app/public": not found`
-В репо должна быть папка `public/` (хотя бы пустая с `.gitkeep`). Если удалили случайно:
-```bash
-mkdir -p public && touch public/.gitkeep
-```
-
-### Magic link не приходит
-```bash
-docker compose logs app | grep -i -E "nodemailer|smtp|email"
-```
-Типовые причины:
-- неверный `EMAIL_SERVER_PORT` / `EMAIL_SERVER_SECURE` (для Exchange обычно 587 + `false`)
-- Exchange не разрешает authenticated SMTP с IP сервера (receive connector)
-- `EMAIL_FROM` с доменом, который Exchange не обслуживает → relay denied
-- самоподписанный сертификат на Exchange — добавьте в `src/auth.ts` в объект `server`: `tls: { rejectUnauthorized: false }`
-
-### Ошибка `AuthJS: missing URL` или редирект на неправильный хост
-`AUTH_URL` в `.env` должен **буква-в-букву** совпадать с тем, что пользователи вбивают в браузере (схема + хост + порт):
-```
-AUTH_URL=http://10.185.22.36:3000
-```
-
-### Порт 3000 уже занят на хосте
-Поменяйте левую часть маппинга в `docker-compose.yml`:
+### Порт 3000 занят
 ```yaml
 ports:
   - "3100:3000"
 ```
-И синхронно обновите `AUTH_URL=http://<ip>:3100`.
++ поменять `AUTH_URL` на `:3100`.
 
 ## Структура
 ```
 src/app/            — страницы (home, signin, picks, leaderboard, admin)
-src/auth.ts         — Auth.js конфиг
+src/auth.ts         — Auth.js + Credentials + bcryptjs
 src/lib/db.ts       — pg pool
+src/lib/bootstrap.ts — создание первого админа из env
 src/lib/nhl-sync.ts — синк с api-web.nhle.com
-db/schema.sql       — схема Postgres (применяется при первом старте контейнера)
+src/instrumentation.ts — запускает bootstrap при старте сервера
+db/schema.sql       — схема Postgres
 docker-compose.yml  — postgres + app + cron
 ```

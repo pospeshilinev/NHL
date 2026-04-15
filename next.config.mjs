@@ -5,4 +5,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 export default withNextIntl({
   reactStrictMode: true,
   output: 'standalone',
+  experimental: {
+    instrumentationHook: true,
+  },
 });

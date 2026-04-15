@@ -1,51 +1,16 @@
--- NHL Playoff Picks — Postgres schema (self-hosted, без RLS, доступ контролируется в коде).
--- Применяется автоматически при первом старте контейнера postgres (см. docker-compose).
+-- NHL Playoff Picks — Postgres schema (credentials auth, без email).
 
 create extension if not exists "uuid-ossp";
 
--- ============ Auth.js (pg-adapter) ============
--- Структура из @auth/pg-adapter; добавлены наши поля display_name + role.
 create table if not exists users (
   id serial primary key,
-  name text,
-  email text not null unique,
-  "emailVerified" timestamptz,
-  image text,
+  username text not null unique,
+  password_hash text not null,
   display_name text,
   role text not null default 'player' check (role in ('player','admin')),
   created_at timestamptz not null default now()
 );
 
-create table if not exists accounts (
-  id serial primary key,
-  "userId" integer not null references users(id) on delete cascade,
-  type varchar(255) not null,
-  provider varchar(255) not null,
-  "providerAccountId" varchar(255) not null,
-  refresh_token text,
-  access_token text,
-  expires_at bigint,
-  id_token text,
-  scope text,
-  session_state text,
-  token_type text
-);
-
-create table if not exists sessions (
-  id serial primary key,
-  "userId" integer not null references users(id) on delete cascade,
-  expires timestamptz not null,
-  "sessionToken" varchar(255) not null unique
-);
-
-create table if not exists verification_token (
-  identifier text not null,
-  token text not null,
-  expires timestamptz not null,
-  primary key (identifier, token)
-);
-
--- ============ Domain ============
 create table if not exists seasons (
   id uuid primary key default uuid_generate_v4(),
   year int not null unique,
@@ -103,7 +68,6 @@ create table if not exists bonus_results (
   cup_winner text
 );
 
--- ============ Scoring views ============
 create or replace view series_scores as
 select
   p.user_id,
@@ -135,7 +99,7 @@ join bonus_results br on br.season_id = bp.season_id;
 create or replace view leaderboard as
 select
   u.id as user_id,
-  coalesce(u.display_name, u.email) as display_name,
+  coalesce(u.display_name, u.username) as display_name,
   s.id as season_id,
   coalesce((select sum(points) from series_scores ss where ss.user_id = u.id and ss.season_id = s.id), 0) +
   coalesce((select points from bonus_scores bs where bs.user_id = u.id and bs.season_id = s.id), 0) as total_points

@@ -14,7 +14,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Postgres доступен только внутри docker-сети, наружу не публикуется.
 
   app:
     build: .
@@ -27,12 +26,8 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_URL: ${AUTH_URL}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST}
-      EMAIL_SERVER_HOST: ${EMAIL_SERVER_HOST}
-      EMAIL_SERVER_PORT: ${EMAIL_SERVER_PORT}
-      EMAIL_SERVER_USER: ${EMAIL_SERVER_USER}
-      EMAIL_SERVER_PASSWORD: ${EMAIL_SERVER_PASSWORD}
-      EMAIL_SERVER_SECURE: ${EMAIL_SERVER_SECURE}
-      EMAIL_FROM: ${EMAIL_FROM}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       CRON_SECRET: ${CRON_SECRET}
       NHL_SEASON: ${NHL_SEASON}
     # Слушаем на всех интерфейсах хоста — доступно из локальной сети по http://<ip-сервера>:3000

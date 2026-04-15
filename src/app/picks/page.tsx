@@ -7,12 +7,12 @@ import { savePicks } from './actions';
 export default async function PicksPage() {
   const session = await auth();
   if (!session?.user) redirect('/signin');
-  const userId = (session.user as any).id as number;
+  const userId = Number((session.user as any).id);
 
   const [season] = await query<any>(
     'select * from seasons where is_active = true limit 1',
   );
-  if (!season) return <main className="p-6">No active season</main>;
+  if (!season) return <main className="p-6">Сезон не задан. Ждите админа.</main>;
 
   const series = await query<any>(
     `select * from series where season_id = $1
