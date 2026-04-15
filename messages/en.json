@@ -1,0 +1,44 @@
+{
+  "nav": {
+    "home": "Home",
+    "picks": "My Picks",
+    "leaderboard": "Leaderboard",
+    "admin": "Admin",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
+  },
+  "home": {
+    "title": "NHL Playoff Picks",
+    "subtitle": "Submit your picks for every series before the first round starts",
+    "deadline": "Deadline",
+    "rules": "Scoring rules"
+  },
+  "picks": {
+    "round1": "Round 1",
+    "round2": "Round 2",
+    "cf": "Conference Finals",
+    "scf": "Stanley Cup Final",
+    "bonus": "Bonus picks",
+    "winner": "Winner",
+    "games": "Games in series",
+    "save": "Save",
+    "locked": "Picks are locked",
+    "east_cf": "East conference finalists",
+    "west_cf": "West conference finalists",
+    "cup_finalists": "Stanley Cup finalists",
+    "cup_winner": "Champion"
+  },
+  "scoring": {
+    "exact": "Exact series score — 3",
+    "winner": "Winner only — 1",
+    "miss": "Miss — 0",
+    "semi": "Conference finalist — 5 each (max 20)",
+    "final": "Cup finalist — 7 each (max 14)",
+    "champ": "Champion — 10"
+  },
+  "auth": {
+    "emailLabel": "Email",
+    "sendLink": "Send magic link",
+    "linkSent": "Link sent — check your inbox"
+  }
+}
