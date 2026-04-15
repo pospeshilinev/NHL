@@ -10,7 +10,7 @@ export async function syncFromNhl() {
   const season = seasonRows[0];
   if (!season) return { ok: false, reason: 'no active season' };
 
-  const seasonCode = process.env.NHL_SEASON ?? `${season.year - 1}${season.year}`;
+  const seasonCode = process.env.NHL_SEASON ?? `${season.year}`;
   const res = await fetch(`https://api-web.nhle.com/v1/playoff-bracket/${seasonCode}`, {
     cache: 'no-store',
   });
