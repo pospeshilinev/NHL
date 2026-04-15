@@ -6,7 +6,7 @@
 - **Next.js 14** (App Router, standalone build)
 - **PostgreSQL 16**
 - **Auth.js v5** + Nodemailer (magic link через ваш SMTP)
-- **nginx** на хосте — reverse proxy + HTTPS (отдельно от docker, чтобы можно было обслуживать несколько проектов)
+- **Docker Compose** — postgres + app + cron, app публикует порт 3000 на хосте
 - **next-intl** — RU/EN
 
 ## Правила подсчёта
@@ -23,8 +23,8 @@
 ### Требования
 - Ubuntu 22.04/24.04 (или Debian)
 - 2+ ГБ RAM, 1+ vCPU, 20+ ГБ диска
-- Установленный nginx на хосте (для reverse proxy)
-- Купленный домен с A-записью на IP сервера
+- Свободный TCP-порт 3000 на хосте (или поменяйте маппинг в `docker-compose.yml`)
+- IP сервера в локальной сети либо DNS-имя
 - Доступ к SMTP-серверу Exchange (хост, порт, учётка, пароль)
 
 ### Шаги
@@ -50,26 +50,24 @@
    openssl rand -base64 32
    ```
 
-4. **Запустить контейнеры:**
+4. **В `.env` указать `AUTH_URL`** — ровно тот URL, по которому будут открывать сайт:
+   ```
+   AUTH_URL=http://10.185.22.10:3000
+   AUTH_TRUST_HOST=true
+   ```
+   (или DNS-имя, например `http://nhl.local:3000`).
+
+5. **Запустить контейнеры:**
    ```bash
    docker compose up -d --build
    ```
-   App слушает только на `127.0.0.1:3000` — снаружи недоступен напрямую.
-
-5. **Настроить nginx на хосте:**
+   Приложение доступно на `http://<ip-сервера>:3000` со всей локальной сети.
+   Если есть firewall:
    ```bash
-   sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/nhl-picks
-   sudo nano /etc/nginx/sites-available/nhl-picks   # заменить server_name
-   sudo ln -s /etc/nginx/sites-available/nhl-picks /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
-   HTTPS — через certbot:
-   ```bash
-   sudo apt install certbot python3-certbot-nginx
-   sudo certbot --nginx -d picks.example.com
+   sudo ufw allow from 10.185.22.0/24 to any port 3000
    ```
 
-6. **Войти на сайт** (`/signin`) — придёт magic link на ваш email.
+6. **Открыть сайт** в браузере → `/signin` → ввести email → перейти по magic link из письма.
 
 7. **Назначить себя админом:**
    ```bash
@@ -97,6 +95,5 @@ src/auth.ts         — Auth.js конфиг
 src/lib/db.ts       — pg pool
 src/lib/nhl-sync.ts — синк с api-web.nhle.com
 db/schema.sql       — схема Postgres (применяется при первом старте контейнера)
-docker-compose.yml         — postgres + app + cron (без reverse proxy)
-deploy/nginx.conf.example  — пример конфига для хостового nginx
+docker-compose.yml  — postgres + app + cron
 ```
