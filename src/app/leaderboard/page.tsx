@@ -1,14 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
 
 export default async function LeaderboardPage() {
-  const supabase = createClient();
-  const { data: season } = await supabase
-    .from('seasons').select('*').eq('is_active', true).single();
+  const [season] = await query<any>('select * from seasons where is_active = true limit 1');
   if (!season) return <main className="p-6">No active season</main>;
 
-  const { data } = await supabase
-    .from('leaderboard').select('*').eq('season_id', season.id)
-    .order('total_points', { ascending: false });
+  const rows = await query<any>(
+    `select * from leaderboard where season_id = $1 order by total_points desc`,
+    [season.id],
+  );
 
   return (
     <main className="mx-auto max-w-xl px-6 py-8">
@@ -18,7 +17,7 @@ export default async function LeaderboardPage() {
           <tr><th>#</th><th>Name</th><th className="text-right">Points</th></tr>
         </thead>
         <tbody>
-          {(data ?? []).map((row: any, i: number) => (
+          {rows.map((row: any, i: number) => (
             <tr key={row.user_id} className="border-t border-neutral-800">
               <td className="py-2">{i + 1}</td>
               <td>{row.display_name}</td>

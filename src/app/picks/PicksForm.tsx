@@ -1,26 +1,22 @@
 'use client';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
-import { createClient } from '@/lib/supabase/client';
+import type { SavePicksInput } from './actions';
 
 type Series = {
   id: string; round: number; conference: 'E' | 'W' | null; slot: number;
   team_high: string | null; team_low: string | null;
 };
 type Pick = { series_id: string; winner: string; games: number };
-type Bonus = {
-  east_cf_team_a: string; east_cf_team_b: string;
-  west_cf_team_a: string; west_cf_team_b: string;
-  cup_finalist_east: string; cup_finalist_west: string;
-  cup_winner: string;
-} | null;
+type Bonus = SavePicksInput['bonus'] | null;
 
-export default function PicksForm({ season, series, picks, bonus, locked }: {
+export default function PicksForm({ season, series, picks, bonus, locked, action }: {
   season: { id: string; picks_deadline: string };
   series: Series[]; picks: Pick[]; bonus: Bonus; locked: boolean;
+  action: (input: SavePicksInput) => Promise<void>;
 }) {
   const t = useTranslations('picks');
-  const supabase = createClient();
+  const [pending, startTransition] = useTransition();
   const [state, setState] = useState<Record<string, { winner: string; games: number }>>(
     Object.fromEntries(picks.map((p) => [p.series_id, { winner: p.winner, games: p.games }])),
   );
@@ -28,23 +24,23 @@ export default function PicksForm({ season, series, picks, bonus, locked }: {
     east_cf_team_a: '', east_cf_team_b: '', west_cf_team_a: '', west_cf_team_b: '',
     cup_finalist_east: '', cup_finalist_west: '', cup_winner: '',
   });
-  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  async function save() {
-    setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); return; }
-    const rows = Object.entries(state)
-      .filter(([, v]) => v.winner && v.games)
-      .map(([series_id, v]) => ({ user_id: user.id, series_id, winner: v.winner, games: v.games }));
-    await supabase.from('picks').upsert(rows, { onConflict: 'user_id,series_id' });
-    await supabase.from('bonus_picks').upsert(
-      { ...bonusState, user_id: user.id, season_id: season.id },
-      { onConflict: 'user_id,season_id' },
-    );
-    setSaving(false);
-    setMsg(t('save') + ' ✓');
+  function save() {
+    startTransition(async () => {
+      try {
+        await action({
+          seasonId: season.id,
+          picks: Object.entries(state)
+            .filter(([, v]) => v.winner && v.games)
+            .map(([seriesId, v]) => ({ seriesId, winner: v.winner, games: v.games })),
+          bonus: bonusState,
+        });
+        setMsg('✓');
+      } catch (e: any) {
+        setMsg(`Ошибка: ${e.message}`);
+      }
+    });
   }
 
   const byRound = (r: number) => series.filter((s) => s.round === r);
@@ -61,20 +57,18 @@ export default function PicksForm({ season, series, picks, bonus, locked }: {
           <div className="space-y-2">
             {byRound(r).map((s) => (
               <div key={s.id} className="flex items-center gap-3 rounded border border-neutral-800 p-3">
-                <div className="flex-1 text-sm">
-                  {s.team_high ?? '—'} vs {s.team_low ?? '—'}
-                </div>
+                <div className="flex-1 text-sm">{s.team_high ?? '—'} vs {s.team_low ?? '—'}</div>
                 <input
                   disabled={locked}
                   placeholder={t('winner')}
                   value={state[s.id]?.winner ?? ''}
-                  onChange={(e) => setState((p) => ({ ...p, [s.id]: { ...p[s.id], winner: e.target.value, games: p[s.id]?.games ?? 4 } }))}
+                  onChange={(e) => setState((p) => ({ ...p, [s.id]: { winner: e.target.value, games: p[s.id]?.games ?? 4 } }))}
                   className="w-40 rounded bg-neutral-900 border border-neutral-700 px-2 py-1 text-sm"
                 />
                 <select
                   disabled={locked}
                   value={state[s.id]?.games ?? 4}
-                  onChange={(e) => setState((p) => ({ ...p, [s.id]: { ...p[s.id], games: Number(e.target.value), winner: p[s.id]?.winner ?? '' } }))}
+                  onChange={(e) => setState((p) => ({ ...p, [s.id]: { winner: p[s.id]?.winner ?? '', games: Number(e.target.value) } }))}
                   className="rounded bg-neutral-900 border border-neutral-700 px-2 py-1 text-sm"
                 >
                   {[4, 5, 6, 7].map((g) => <option key={g} value={g}>{g}</option>)}
@@ -107,7 +101,7 @@ export default function PicksForm({ season, series, picks, bonus, locked }: {
       </section>
 
       <button
-        disabled={locked || saving}
+        disabled={locked || pending}
         onClick={save}
         className="rounded bg-blue-600 px-4 py-2 font-medium disabled:opacity-50"
       >

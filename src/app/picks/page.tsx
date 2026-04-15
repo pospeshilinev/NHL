@@ -1,25 +1,34 @@
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
+import { query } from '@/lib/db';
 import PicksForm from './PicksForm';
+import { savePicks } from './actions';
 
 export default async function PicksPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/signin');
+  const session = await auth();
+  if (!session?.user) redirect('/signin');
+  const userId = (session.user as any).id as number;
 
-  const { data: season } = await supabase
-    .from('seasons').select('*').eq('is_active', true).single();
+  const [season] = await query<any>(
+    'select * from seasons where is_active = true limit 1',
+  );
   if (!season) return <main className="p-6">No active season</main>;
 
-  const { data: series } = await supabase
-    .from('series').select('*').eq('season_id', season.id)
-    .order('round').order('conference').order('slot');
+  const series = await query<any>(
+    `select * from series where season_id = $1
+     order by round, conference nulls last, slot`,
+    [season.id],
+  );
 
-  const { data: picks } = await supabase
-    .from('picks').select('*').eq('user_id', user.id);
+  const picks = await query<any>(
+    'select * from picks where user_id = $1',
+    [userId],
+  );
 
-  const { data: bonus } = await supabase
-    .from('bonus_picks').select('*').eq('user_id', user.id).eq('season_id', season.id).maybeSingle();
+  const [bonus] = await query<any>(
+    'select * from bonus_picks where user_id = $1 and season_id = $2',
+    [userId, season.id],
+  );
 
   const locked = new Date(season.picks_deadline) < new Date();
 
@@ -27,10 +36,11 @@ export default async function PicksPage() {
     <main className="mx-auto max-w-3xl px-6 py-8">
       <PicksForm
         season={season}
-        series={series ?? []}
-        picks={picks ?? []}
-        bonus={bonus}
+        series={series}
+        picks={picks}
+        bonus={bonus ?? null}
         locked={locked}
+        action={savePicks}
       />
     </main>
   );

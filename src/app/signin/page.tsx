@@ -1,20 +1,16 @@
 'use client';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { createClient } from '@/lib/supabase/client';
+import { signIn } from 'next-auth/react';
 
 export default function SignInPage() {
   const t = useTranslations('auth');
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
-  const supabase = createClient();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${location.origin}/auth/callback` },
-    });
+    await signIn('nodemailer', { email, redirect: false });
     setSent(true);
   }
 
